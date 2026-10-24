@@ -1,0 +1,8 @@
+private-source/
+__pycache__/
+*.key
+*.age
+*.ipa
+*.tar
+*.zip
+*.log
