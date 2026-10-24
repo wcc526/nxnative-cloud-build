@@ -7,7 +7,7 @@ import tarfile
 
 RECIPIENT = 'age1ekkajc8ml47v2yak0s5zvef26r39m78yl329dm9l9qcvfcfvyexqvq9edn'
 SOURCE = 'wcc526/nxnative-private-build'
-INPUT_TAG = 'cloud-input-links-awakening-110-windows'
+INPUT_TAG = 'cloud-input-links-awakening-crop-20261024'
 
 
 def encrypt_result(age, report, output):
