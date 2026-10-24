@@ -1,0 +1,46 @@
+name: Export encrypted Slay the Spire result
+on:
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: spire-startup-encrypted-export
+  cancel-in-progress: false
+jobs:
+  export:
+    if: github.repository == 'wcc526/nxnative-cloud-build' && github.ref == 'refs/heads/main' && github.actor == 'wcc526'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: wcc526/nxnative-cloud-build
+    steps:
+      - name: Verify successful source run and download encrypted artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api repos/wcc526/nxnative-cloud-build/actions/runs/40066527569 > run.json
+          python3 - <<'PY'
+          import json
+          r = json.load(open('run.json'))
+          assert r['conclusion'] == 'success'
+          assert r['head_sha'] == 'daf50315d7a4bd60420678bef30d92105e06129d'
+          assert r['path'] == '.github/workflows/spire-startup.yml'
+          PY
+          gh run download 40066527569 --name encrypted-build-result --dir result
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('result/build-result.tar.age')
+          assert list(Path('result').iterdir()) == [p]
+          assert 0 < p.stat().st_size < 1024**3
+          with p.open('rb') as f:
+              assert f.read(22) == b'age-encryption.org/v1\n'
+          PY
+      - name: Publish encrypted output for reliable download
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd result
+          sha256sum build-result.tar.age > build-result.tar.age.sha256
+          gh release create spire-startup-fix1-20261024 build-result.tar.age build-result.tar.age.sha256 --target "$GITHUB_SHA" --prerelease --title 'Encrypted Slay the Spire diagnostic build' --notes 'Encrypted output from successful run 40066527569. Requires the local owner identity to decrypt; contains no plaintext game files.'
