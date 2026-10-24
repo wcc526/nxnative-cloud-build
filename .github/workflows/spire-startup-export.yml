@@ -20,15 +20,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api repos/wcc526/nxnative-cloud-build/actions/runs/40066527569 > run.json
+          gh api repos/wcc526/nxnative-cloud-build/actions/runs/40069816338 > run.json
           python3 - <<'PY'
           import json
           r = json.load(open('run.json'))
           assert r['conclusion'] == 'success'
-          assert r['head_sha'] == 'daf50315d7a4bd60420678bef30d92105e06129d'
+          assert r['head_sha'] == '79c8c8573bb6858e9f4fe19955ad204eb57f6cbf'
           assert r['path'] == '.github/workflows/spire-startup.yml'
           PY
-          gh run download 40066527569 --name encrypted-build-result --dir result
+          gh run download 40069816338 --name encrypted-build-result --dir result
           python3 - <<'PY'
           from pathlib import Path
           p = Path('result/build-result.tar.age')
@@ -43,4 +43,4 @@ jobs:
           set -euo pipefail
           cd result
           sha256sum build-result.tar.age > build-result.tar.age.sha256
-          gh release create spire-startup-fix1-20261024 build-result.tar.age build-result.tar.age.sha256 --target "$GITHUB_SHA" --prerelease --title 'Encrypted Slay the Spire diagnostic build' --notes 'Encrypted output from successful run 40066527569. Requires the local owner identity to decrypt; contains no plaintext game files.'
+          gh release create spire-client-fix2-20261024 build-result.tar.age build-result.tar.age.sha256 --target "$GITHUB_SHA" --prerelease --title 'Encrypted Slay the Spire diagnostic build' --notes 'Encrypted output from successful run 40069816338. Requires the local owner identity to decrypt; contains no plaintext game files.'
