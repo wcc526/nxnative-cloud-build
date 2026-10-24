@@ -1,5 +1,5 @@
 name: Slay the Spire startup repair
-run-name: Slay the Spire client vertex Fix2
+run-name: Slay the Spire display residency Fix3
 on:
   workflow_dispatch:
 permissions:
@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: wcc526/nxnative-private-build
-          ref: 2eff99463632725693b5f42c83fa17752db672ca
+          ref: 7a49d0ffd757c84c31195df9e4b7eb37658971c4
           token: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
           persist-credentials: false
           path: private-source
