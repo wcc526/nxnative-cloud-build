@@ -20,15 +20,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh api repos/wcc526/nxnative-cloud-build/actions/runs/40063744754 > run.json
+          gh api repos/wcc526/nxnative-cloud-build/actions/runs/40067787511 > run.json
           python3 - <<'PY'
           import json
           r = json.load(open('run.json'))
           assert r['conclusion'] == 'success'
-          assert r['head_sha'] == 'b43d988411c8b02b1206d27aaa66a5aed02ff3d2'
+          assert r['head_sha'] == '5f79c19da567989a9a84fc29cbe447ca088b68a9'
           assert r['path'] == '.github/workflows/terraria.yml'
           PY
-          gh run download 40063744754 --name encrypted-build-result --dir result
+          gh run download 40067787511 --name encrypted-build-result --dir result
           python3 - <<'PY'
           from pathlib import Path
           p = Path('result/build-result.tar.age')
@@ -43,4 +43,4 @@ jobs:
           set -euo pipefail
           cd result
           sha256sum build-result.tar.age > build-result.tar.age.sha256
-          gh release create terraria-runtime-20261024 build-result.tar.age build-result.tar.age.sha256 --target "$GITHUB_SHA" --prerelease --title 'Encrypted Terraria diagnostic build' --notes 'Encrypted output from successful run 40063744754. Requires the local owner identity to decrypt; contains no plaintext game files.'
+          gh release create terraria-worldgen-memory-20261024 build-result.tar.age build-result.tar.age.sha256 --target "$GITHUB_SHA" --prerelease --title 'Encrypted Terraria world-generation memory validation' --notes 'Encrypted output from successful run 40067787511. Requires the local owner identity to decrypt; contains no plaintext game files.'
