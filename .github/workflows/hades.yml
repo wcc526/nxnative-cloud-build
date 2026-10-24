@@ -1,5 +1,5 @@
 name: Hades II memory optimization IPA
-run-name: Hades II memory optimization 6a6f5f3
+run-name: Hades II memory optimization 3f8fe04
 on:
   workflow_dispatch:
     inputs:
@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: wcc526/nxnative-private-build
-          ref: 6a6f5f31f210b2118caa1751818cb37afef85cbe
+          ref: 3f8fe043ebc7c13bcaf9f48a50b396a7d53e2468
           token: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
           persist-credentials: false
           path: private-source
