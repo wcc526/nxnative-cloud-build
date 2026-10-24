@@ -1,5 +1,5 @@
 name: Terraria diagnostic IPA
-run-name: Terraria 4.5.4 runtime diagnostics
+run-name: Terraria 4.5.4 world-generation memory validation
 on:
   workflow_dispatch:
     inputs:
@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: wcc526/nxnative-private-build
-          ref: 06ef1f5978f5912f3fa69447e41cb88864cc78df
+          ref: fac251f0bfcd33e5bf04043ad60906f1c222a6c5
           token: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
           persist-credentials: false
           path: private-source
