@@ -21,7 +21,7 @@ Select **Actions > Private-input Apple build > Run workflow**. macOS shader
 validation is enabled by default. The experimental source excludes 55 reviewed
 unsupported shaders; successful compilation does not guarantee playability.
 
-Download `encrypted-build-result` within **one day**. It contains only
+Download `encrypted-build-result` within **seven days**. It contains only
 `build-result.tar.age`: the intermediate unsigned IPA and diagnostic logs encrypted
 with age 1.3.2 to the owner's public recipient. The private identity stays on the
 owner's computer and is never uploaded. Failed builds also save encrypted logs when
