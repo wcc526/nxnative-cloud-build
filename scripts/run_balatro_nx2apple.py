@@ -33,7 +33,7 @@ def main():
             fetch_env.clear()
             token = ''
             print('Compiling Apple code. Detailed logs are kept private.', flush=True)
-            run([sys.executable, 'scripts/balatro_nx2apple.py', '--input', str(root / 'nx-input'),
+            run([sys.executable, 'scripts/balatro_nx2apple_capture.py', '--input', str(root / 'nx-input'),
                  '--work', str(root / 'nx-build')], 2700)
             status = 0
         except Exception:

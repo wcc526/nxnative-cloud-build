@@ -1,5 +1,5 @@
 name: Balatro NX2Apple
-run-name: Balatro NX2Apple full shader build
+run-name: Balatro NX2Apple device shader capture
 on:
   workflow_dispatch:
     inputs:
@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: wcc526/nxnative-private-build
-          ref: e9fff20257adb2824878f257a7c4990d0ddaf6fc
+          ref: 2f796004c9fcf219a7dc4c798fcf3cbdf7479edd
           token: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
           persist-credentials: false
           path: private-source
