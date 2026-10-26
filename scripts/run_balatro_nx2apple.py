@@ -1,5 +1,6 @@
 """Build Balatro diagnostics with private logs and encrypted output only."""
 import os
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
@@ -30,11 +31,19 @@ def main():
             fetch_env = dict(clean_env, GH_TOKEN=token, GITHUB_REPOSITORY='wcc526/nxnative-private-build')
             run([sys.executable, 'scripts/cloud_ipa.py', 'fetch',
                  '--tag', 'cloud-input-balatro-113-probe', '--out', str(root / 'nx-input')], 900, fetch_env)
+            shader_dir = root / 'nx-device-shaders'
+            shader_dir.mkdir(mode=0o700)
+            run(['gh', 'release', 'download', 'cloud-input-balatro-shaders-20261026',
+                 '--repo', 'wcc526/nxnative-private-build', '--pattern', 'device-shaders.zip',
+                 '--dir', str(shader_dir)], 180, fetch_env)
+            shader_zip = shader_dir / 'device-shaders.zip'
+            if shader_zip.stat().st_size > 2 * 1024**2 or hashlib.sha256(shader_zip.read_bytes()).hexdigest() != '68d5175f0fad4c932ee58c09fbc265c4c5b2faf7c2e8ca11f364d4b79d3b65e5':
+                raise RuntimeError('Device shader archive identity mismatch')
             fetch_env.clear()
             token = ''
             print('Compiling Apple code. Detailed logs are kept private.', flush=True)
-            run([sys.executable, 'scripts/balatro_nx2apple_capture.py', '--input', str(root / 'nx-input'),
-                 '--work', str(root / 'nx-build')], 2700)
+            run([sys.executable, 'scripts/balatro_nx2apple.py', '--input', str(root / 'nx-input'),
+                 '--work', str(root / 'nx-build'), '--device-capture', str(shader_zip)], 2700)
             status = 0
         except Exception:
             log.write(b'\nBuild stage failed; inspect the preceding private log.\n')
