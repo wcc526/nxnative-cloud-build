@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: wcc526/nxnative-private-build
-          ref: e2840525d47d9c5b434cc24a5fba199675b4c7d3
+          ref: f4562e3a850af7cbaa6453959fe5b5d1e8f84aa3
           token: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
           persist-credentials: false
           path: private-source
