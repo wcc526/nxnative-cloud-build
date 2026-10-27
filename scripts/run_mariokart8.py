@@ -8,6 +8,7 @@ import tarfile
 RECIPIENT = 'age1ekkajc8ml47v2yak0s5zvef26r39m78yl329dm9l9qcvfcfvyexqvq9edn'
 SOURCE = 'wcc526/nxnative-private-build'
 INPUT_TAG = 'cloud-input-mariokart8-400-20261027'
+CACHE_TAG = 'cloud-cache-mariokart8-400-hostfix-20261027'
 
 
 def encrypt_result(age, report, output):
@@ -79,7 +80,7 @@ def main():
             fetch_env.clear()
             print('Rebuilding host with verified cached shaders.', flush=True)
             fetch_env = dict(clean_env, GH_TOKEN=token, GITHUB_REPOSITORY=SOURCE)
-            run(['gh', 'release', 'download', INPUT_TAG, '--repo', SOURCE, '--pattern',
+            run(['gh', 'release', 'download', CACHE_TAG, '--repo', SOURCE, '--pattern',
                  'verified-ios-cache-400.ipa.zst.part*', '--dir', str(root / 'nx-input')], 1800, fetch_env)
             fetch_env.clear()
             token = ''
