@@ -77,14 +77,24 @@ def main():
             run([sys.executable, 'scripts/cloud_ipa.py', 'fetch', '--slim-only',
                  '--tag', INPUT_TAG, '--out', str(root / 'nx-input')], 1800, fetch_env)
             fetch_env.clear()
+            print('Rebuilding host with verified cached shaders.', flush=True)
+            fetch_env = dict(clean_env, GH_TOKEN=token, GITHUB_REPOSITORY=SOURCE)
+            run(['gh', 'release', 'download', INPUT_TAG, '--repo', SOURCE, '--pattern',
+                 'verified-ios-cache-400.ipa.zst.part*', '--dir', str(root / 'nx-input')], 1800, fetch_env)
+            fetch_env.clear()
             token = ''
-            print('Compiling Apple code. Detailed logs are kept private.', flush=True)
-            args = [sys.executable, 'scripts/cloud_ipa.py', 'build',
-                    '--input', str(root / 'nx-input'), '--work', str(root / 'nx-build'),
-                    '--out', str(report / 'Cloud-intermediate.ipa'), '--language', 'zh-Hans']
-            if clean_env.get('VALIDATE_MAC') == 'true':
-                args.append('--validate-mac')
-            run(args, 18000)
+            compressed = root / 'nx-input/cache.ipa.zst'
+            with compressed.open('xb') as stream:
+                for part in sorted((root / 'nx-input').glob('verified-ios-cache-400.ipa.zst.part*')):
+                    with part.open('rb') as inp:
+                        import shutil
+                        shutil.copyfileobj(inp, stream, 1024**2)
+            run(['zstd', '--decompress', str(compressed), '-o', str(root / 'nx-input/verified-ios-cache-400.ipa')], 180)
+            args = [sys.executable, 'scripts/rebuild_kart_host.py',
+                    '--input', str(root / 'nx-input'), '--cache', str(root / 'nx-input/verified-ios-cache-400.ipa'),
+                    '--cache-sha256', 'a94eff98a231c338a9d7323f7031eb2bbadde12c4732498b02286b5f926d2dce', '--work', str(root / 'nx-build'),
+                    '--out', str(report / 'Host-update.zip')]
+            run(args, 3600)
             status = 0
         except Exception as error:
             import traceback

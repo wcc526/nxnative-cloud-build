@@ -1,5 +1,5 @@
 name: Mario Kart 8 Deluxe experimental IPA
-run-name: Mario Kart 8 Deluxe 4.0.0 encrypted build
+run-name: Mario Kart 8 Deluxe 4.0.0 notification deadlock fix
 on:
   workflow_dispatch:
     inputs:
@@ -16,7 +16,7 @@ jobs:
   build:
     if: github.repository == 'wcc526/nxnative-cloud-build' && github.ref == 'refs/heads/main' && github.actor == 'wcc526'
     runs-on: macos-26
-    timeout-minutes: 360
+    timeout-minutes: 90
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: wcc526/nxnative-private-build
-          ref: 506520ed277dd3c45869ccbd3a9bfe1781e7c4c2
+          ref: 907b4735bd95d42b0b5bac5b15864293eaf4fc60
           token: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
           persist-credentials: false
           path: private-source
