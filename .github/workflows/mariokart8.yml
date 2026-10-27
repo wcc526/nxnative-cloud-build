@@ -41,6 +41,7 @@ jobs:
         with:
           repository: wcc526/nxnative-private-build
           ref: 907b4735bd95d42b0b5bac5b15864293eaf4fc60
+          fetch-depth: 2
           token: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
           persist-credentials: false
           path: private-source
