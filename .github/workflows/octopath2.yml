@@ -1,0 +1,70 @@
+name: OCTOPATH TRAVELER II unsigned IPA
+run-name: OCTOPATH TRAVELER II 1.0.2 encrypted build
+on:
+  workflow_dispatch:
+    inputs:
+      validate_mac:
+        description: Also compile macOS shaders
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: octopath2-build
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'wcc526/nxnative-cloud-build' && github.ref == 'refs/heads/main' && github.actor == 'wcc526'
+    runs-on: macos-26
+    timeout-minutes: 360
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - name: Check required credential
+        env:
+          PRIVATE_BUILD_READ_TOKEN: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
+        run: |
+          if [ -z "$PRIVATE_BUILD_READ_TOKEN" ]; then
+            echo '::error::Configure the read-only PRIVATE_BUILD_READ_TOKEN repository secret first.'
+            exit 1
+          fi
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install verified encryption utility
+        run: python scripts/install_age.py
+      - name: Checkout reviewed private build source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: wcc526/nxnative-private-build
+          ref: 0184dc3b076b0c6d69dc89aa38955d9f585a1506
+          token: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
+          persist-credentials: false
+          path: private-source
+      - name: Install Apple build dependencies
+        timeout-minutes: 30
+        run: |
+          xcodebuild -version
+          brew install xcodegen spirv-cross zstd dotnet@10
+          echo "$(brew --prefix dotnet@10)/bin" >> "$GITHUB_PATH"
+          echo "DOTNET_ROOT=$(brew --prefix dotnet@10)/libexec" >> "$GITHUB_ENV"
+          python -m pip install -r private-source/scripts/cloud-requirements.txt
+          xcodebuild -downloadComponent MetalToolchain
+          xcrun -sdk iphoneos metal --version
+      - name: Compile with private logs and encrypt results
+        env:
+          PRIVATE_BUILD_READ_TOKEN: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
+          VALIDATE_MAC: ${{ inputs.validate_mac }}
+        run: python scripts/run_octopath2.py
+      - name: Upload encrypted result only
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: encrypted-build-result
+          path: ${{ runner.temp }}/nx-public-output/build-result.tar.age
+          if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 1
