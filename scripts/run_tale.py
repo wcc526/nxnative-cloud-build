@@ -120,6 +120,7 @@ def main():
                        AOC='', DM_TEAM_ID='0000000000', DM_OMIT_ROMFS='1', DM_ENV_FILE=str(env_file))
             print('Testing haptics and compiling the updated iOS host.', flush=True)
             run(['make', '-C', 'dm/host/tests', 'haptics'], 300, env)
+            run(['make', '-C', 'dm/host/tests', 'vam'], 300, env)
             output = report / 'Cloud-intermediate.ipa'
             run(['bash', 'dm/ios/tools/build_ipa.sh', str(output)], 3600, env)
             with zipfile.ZipFile(output, 'a') as archive:
