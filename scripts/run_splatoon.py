@@ -18,7 +18,7 @@ import zipfile
 
 PRIVATE = 'wcc526/nxnative-private-build'
 TAG = 'splatoon-raiders-110-20261105'
-MANIFEST_SHA = 'c723ef1093766a9f97d5d5e74aa978025b8f45e24408177fefe75aaa5903e6f2'
+MANIFEST_SHA = 'a4481f7db10e15c604bf631feb9e9d8705ec5d284179d4c7915722a6cb69f5d5'
 RECIPIENT = 'age19pfyltntrja0tueqdq7afxwwgp9n0g6gspdxhdwmye2282vzyqjskxegqj'
 TITLE = '0400380020056000'
 
