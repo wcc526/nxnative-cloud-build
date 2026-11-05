@@ -10,10 +10,10 @@ concurrency:
 jobs:
   build:
     if: github.repository == 'wcc526/nxnative-cloud-build' && github.actor == 'wcc526'
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 360
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -24,13 +24,11 @@ jobs:
       - name: Select Apple compiler
         shell: bash
         run: |
-          if [ -d /Applications/Xcode_27.2.app ]; then
-            echo DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer >> "$GITHUB_ENV"
-          elif [ -d /Applications/Xcode-27.2.app ]; then
-            echo DEVELOPER_DIR=/Applications/Xcode-27.2.app/Contents/Developer >> "$GITHUB_ENV"
-          fi
+          test -d "$DEVELOPER_DIR"
           ls -d /Applications/Xcode*.app
           xcodebuild -version
+          xcodebuild -version | head -1 | grep -Fx 'Xcode 27.2'
+          xcrun -sdk iphoneos --show-sdk-version
       - name: Install build dependencies
         timeout-minutes: 30
         run: |

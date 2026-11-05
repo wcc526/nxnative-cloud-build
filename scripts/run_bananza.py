@@ -106,16 +106,11 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env, cache=N
     sys.path[:0] = [str(source / p) for p in ('scripts', 'dm/games', 'dm/tools')]
     import build_ipa_from_nsp as b
     import game
-    import host_compat
-    host_source=source/'dm/gfx/nvn/nvn_mtl.m'
-    host_source.write_text(host_compat.apply(host_source.read_text()))
+    # The xcode-27 runner supplies the SDK used by the pinned engine. Build the
+    # original source and keep the project's Metal compiler checks enabled.
     build_provenance=dict(manifest['provenance'],host_sdk_compatibility={
-        'patch_sha256':sha(Path(host_compat.__file__)),
-        'patched_source_sha256':sha(host_source),
-        'description':'Documented MetalFX 27 offset setters declared for SDK 26, with the original OS availability gate'})
-    (report/'build-provenance.json').write_text(json.dumps(build_provenance,indent=2))
-    # User chose the project's documented alternative-Metal path on 2026-11-05.
-    b.ALLOW_OTHER_METAL = True
+        'description':'Original engine source compiled with native Xcode 27.2 SDK declarations; no SDK-26 patch'})
+    b.ALLOW_OTHER_METAL = False
     profile=source/'dm/games'/TITLE
     rows=lambda p:[s for s in p.read_text().splitlines() if s.strip() and not s.startswith('#')]
     assert rows(profile/'game.tsv')==rows(inputs/'Profile/game.tsv')
@@ -132,9 +127,13 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env, cache=N
     (work / 'tmp').mkdir(parents=True)
     (inputs / 'RomFS').mkdir(exist_ok=True)
     env = dict(clean_env, DM_GAME=TITLE, DM_ROOT=str(work), WORK=str(work / 'tmp'),
-               J=str(min(os.cpu_count() or 3, 6)), PYTHONUTF8='1', DM_ALLOW_OTHER_METAL='1')
+               J=str(min(os.cpu_count() or 3, 6)), PYTHONUTF8='1')
+    env.pop('DM_ALLOW_OTHER_METAL', None)
     compiler = subprocess.check_output(['xcrun', '-sdk', 'iphoneos', 'metal', '--version'], text=True, env=env)
     (report / 'compiler.txt').write_text(compiler)
+    build_provenance['metal_compiler']=compiler.splitlines()[0]
+    build_provenance['xcode']=subprocess.check_output(['xcodebuild','-version'],text=True,env=env).strip()
+    (report/'build-provenance.json').write_text(json.dumps(build_provenance,indent=2))
     xlate = source / 'dm/gfx/tools/dmsh_xlate_bin/dmsh_xlate'
     b.check_prereqs(env, xlate)
     b.check_metal(sys.executable, source, env)
@@ -215,9 +214,13 @@ def main():
             unpack(incoming / 'compile-input.zip', root / 'input', 4 * 1024**3, manifest['input_files'])
             cache=None
             if manifest.get('host_cache'):
-                unpack(incoming/'host-inputs.zip',root/'cache',8*1024**3)
-                cache=root/'cache'
-                print('Reusing all 23,638 iOS shader libraries; compiling the host and IPA only.',flush=True)
+                actual=subprocess.check_output(['xcrun','-sdk','iphoneos','metal','--version'],text=True,env=env)
+                if actual.splitlines()[0]==manifest['host_cache']['compiler'].splitlines()[0]:
+                    unpack(incoming/'host-inputs.zip',root/'cache',8*1024**3)
+                    cache=root/'cache'
+                    print('Reusing all 23,638 iOS shader libraries; compiling the host and IPA only.',flush=True)
+                else:
+                    print('Metal compiler changed; rebuilding all shader libraries with the selected Xcode.',flush=True)
             print('Compiling Bananza with the pinned NX2Apple engine; detailed logs stay encrypted.', flush=True)
             sys.stdout = sys.stderr = log
             compile_game(root / 'engine', root / 'input', root / 'work', report, manifest, log, env,cache)
