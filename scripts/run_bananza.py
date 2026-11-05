@@ -31,29 +31,20 @@ def sha(path):
     with path.open('rb') as f: return hashlib.file_digest(f, 'sha256').hexdigest()
 
 
-def fetch(token, destination):
+def fetch(ticket_json, destination):
     opener = urllib.request.build_opener(NoRedirect())
-    base = 'https://api.github.com/repos/' + PRIVATE + '/'
-    headers = {'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json'}
-    with opener.open(urllib.request.Request(base + 'releases/tags/' + TAG, headers=headers), timeout=45) as f:
-        release = json.loads(f.read(1024**2))
-    assets = {a['name']: a for a in release['assets']}
+    # These are asset-specific, expiring URLs minted locally. The runner receives
+    # neither a general GitHub token nor console/signing credentials.
+    assets=json.loads(ticket_json)
     assert set(assets) == {'build-manifest.json', 'engine-source.zip', 'compile-input.zip'}
 
     def download(name, maximum):
         asset = assets[name]
         assert 0 < asset['size'] <= maximum
-        req = urllib.request.Request(base + 'releases/assets/' + str(asset['id']),
-            headers=dict(headers, Accept='application/octet-stream'))
-        try: response = opener.open(req, timeout=180)
-        except urllib.error.HTTPError as e:
-            if e.code not in (301, 302, 303, 307, 308): raise
-            target = e.headers['Location']
-            parsed = urllib.parse.urlsplit(target)
-            assert parsed.scheme == 'https' and parsed.hostname == 'release-assets.githubusercontent.com'
-            assert not parsed.username and not parsed.password and parsed.port in (None, 443)
-            # Never forward GitHub credentials to signed object-storage URLs.
-            response = opener.open(urllib.request.Request(target), timeout=180)
+        target=asset['url'];parsed=urllib.parse.urlsplit(target)
+        assert parsed.scheme=='https' and parsed.hostname=='release-assets.githubusercontent.com'
+        assert not parsed.username and not parsed.password and parsed.port in (None,443)
+        response=opener.open(urllib.request.Request(target),timeout=180)
         path = destination / name
         size = 0
         with response, path.open('xb') as f:
@@ -160,7 +151,7 @@ def main():
     root.mkdir(mode=0o700)
     report = root / 'report'; report.mkdir()
     incoming = root / 'incoming'; incoming.mkdir()
-    token = os.environ.pop('PRIVATE_BUILD_READ_TOKEN', '')
+    tickets = os.environ.pop('BANANZA_INPUT_URLS', '')
     env = {k:v for k,v in os.environ.items() if k not in
            ('GH_TOKEN', 'GITHUB_TOKEN', 'ACTIONS_STEP_DEBUG', 'ACTIONS_RUNNER_DEBUG')}
     status = 1
@@ -177,8 +168,8 @@ def main():
         oldout, olderr = sys.stdout, sys.stderr
         try:
             print('Downloading verified private compilation inputs.', flush=True)
-            manifest = fetch(token, incoming)
-            token = ''
+            manifest = fetch(tickets, incoming)
+            tickets = ''
             unpack(incoming / 'engine-source.zip', root / 'engine', 2 * 1024**3)
             unpack(incoming / 'compile-input.zip', root / 'input', 4 * 1024**3, manifest['input_files'])
             print('Compiling Bananza with the pinned NX2Apple engine; detailed logs stay encrypted.', flush=True)

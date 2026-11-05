@@ -42,7 +42,7 @@ jobs:
           python scripts/install_age.py
       - name: Compile and encrypt
         env:
-          PRIVATE_BUILD_READ_TOKEN: ${{ secrets.PRIVATE_BUILD_READ_TOKEN }}
+          BANANZA_INPUT_URLS: ${{ secrets.BANANZA_INPUT_URLS }}
         run: python scripts/run_bananza.py
       - name: Upload encrypted result
         if: ${{ always() && !cancelled() }}
