@@ -34,7 +34,9 @@ jobs:
       - name: Install build dependencies
         timeout-minutes: 30
         run: |
-          brew install xcodegen zstd glslang
+          brew install xcodegen zstd glslang dotnet@10
+          echo "$(brew --prefix dotnet@10)/bin" >> "$GITHUB_PATH"
+          echo "DOTNET_ROOT=$(brew --prefix dotnet@10)/libexec" >> "$GITHUB_ENV"
           dotnet --list-sdks
           python -m pip install lz4 capstone==5.0.6 fonttools backports.zstd
           xcodebuild -downloadComponent MetalToolchain
