@@ -18,7 +18,7 @@ import zipfile
 
 PRIVATE = 'wcc526/nxnative-private-build'
 TAG = 'bananza-320-20261105'
-MANIFEST_SHA = 'ea795d7baaf68e339361eb7ed4596ae0b43742fb9c07b9b83809b36dd4ed6aa0'
+MANIFEST_SHA = '669f7b094bb11e65cd7f6be63e9a2de35ed105757623884a43eaeaa484cc0ef7'
 RECIPIENT = 'age102hu7yuyrkk7f2v28jy3lme9ekj25vwq25p0mhgeesmn75z4kqkqk4udqk'
 TITLE = '040074A01BF12000'
 
@@ -36,7 +36,7 @@ def fetch(ticket_json, destination):
     # These are asset-specific, expiring URLs minted locally. The runner receives
     # neither a general GitHub token nor console/signing credentials.
     assets=json.loads(ticket_json)
-    assert set(assets) == {'build-manifest.json', 'engine-source.zip', 'compile-input.zip'}
+    assert {'build-manifest.json','engine-source.zip','compile-input.zip'}.issubset(assets)
 
     def download(name, maximum):
         asset = assets[name]
@@ -59,11 +59,20 @@ def fetch(ticket_json, destination):
     assert sha(manifest_path) == MANIFEST_SHA
     manifest = json.loads(manifest_path.read_text())
     assert manifest['schema'] == 1 and manifest['game'] == TITLE and manifest['package'] == 'v458752'
-    for name in ('engine-source.zip', 'compile-input.zip'):
-        expected = manifest['assets'][name]
+    assert set(assets)=={'build-manifest.json',*manifest['assets']}
+    for name,expected in manifest['assets'].items():
+        assert PurePosixPath(name).name==name and chr(92) not in name and ':' not in name
         assert assets[name]['size'] == expected['bytes']
         path = download(name, 2 * 1024**3)
         assert sha(path) == expected['sha256']
+    if manifest.get('host_cache'):
+        cache=manifest['host_cache']
+        with (destination/'host-inputs.zip').open('xb') as out:
+            for name in cache['parts']:
+                assert name in manifest['assets']
+                with (destination/name).open('rb') as src:shutil.copyfileobj(src,out,4*1024**2)
+        assert (destination/'host-inputs.zip').stat().st_size==cache['bytes']
+        assert sha(destination/'host-inputs.zip')==cache['sha256']
     return manifest
 
 
@@ -93,10 +102,18 @@ def unpack(archive, root, limit, input_files=None):
         if input_files is not None: assert names == set(input_files)
 
 
-def compile_game(source, inputs, work, report, manifest, log, clean_env):
+def compile_game(source, inputs, work, report, manifest, log, clean_env, cache=None):
     sys.path[:0] = [str(source / p) for p in ('scripts', 'dm/games', 'dm/tools')]
     import build_ipa_from_nsp as b
     import game
+    import host_compat
+    host_source=source/'dm/gfx/nvn/nvn_mtl.m'
+    host_source.write_text(host_compat.apply(host_source.read_text()))
+    build_provenance=dict(manifest['provenance'],host_sdk_compatibility={
+        'patch_sha256':sha(Path(host_compat.__file__)),
+        'patched_source_sha256':sha(host_source),
+        'description':'Documented MetalFX 27 offset setters declared for SDK 26, with the original OS availability gate'})
+    (report/'build-provenance.json').write_text(json.dumps(build_provenance,indent=2))
     # User chose the project's documented alternative-Metal path on 2026-11-05.
     b.ALLOW_OTHER_METAL = True
     profile=source/'dm/games'/TITLE
@@ -124,28 +141,37 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env):
     patched, logs = work / 'patched', work / 'logs'
     b.run([sys.executable,source/'dm/tools/romfs.py',inputs/'RomFS',g.get('romfs_marker')],
           logs/'romfs_preflight.log',env=env)
-    b.rewrite(sys.executable, source, inputs / 'ExeFS', patched, env, logs, g)
-    sh = work / 'shader'
-    sh.mkdir()
-    shutil.move(str(inputs / 'Shader'), sh / 'pkg')
-    wanted = {s.split('\t')[0] for s in g.table('shader_map.tsv').read_text().splitlines()
-              if s.split('\t')[0].endswith('.bin')}
-    assert {p.name for p in (sh / 'pkg').iterdir()} == wanted
-    ios = b.build_shaders(sys.executable, source, sh, xlate, env, logs, g,
-                          pkg_key=b.package_key(sh / 'pkg'))
+    if cache is not None:
+        assert json.loads((cache/'provenance.json').read_text())==manifest['provenance']
+        assert compiler.splitlines()[0]==manifest['host_cache']['compiler'].splitlines()[0]
+        patched=cache/'Patched';ios=cache/'IOS'
+        assert sum(1 for _ in ios.glob('b-*/*_b.metallib'))==23638
+        for name in ('c1_full.tsv','cb_extent.tsv'):
+            shutil.copyfile(cache/'Profile'/name,g.table(name))
+    else:
+        b.rewrite(sys.executable, source, inputs / 'ExeFS', patched, env, logs, g)
+        sh = work / 'shader'
+        sh.mkdir()
+        shutil.move(str(inputs / 'Shader'), sh / 'pkg')
+        wanted = {s.split('\t')[0] for s in g.table('shader_map.tsv').read_text().splitlines()
+                  if s.split('\t')[0].endswith('.bin')}
+        assert {p.name for p in (sh / 'pkg').iterdir()} == wanted
+        ios = b.build_shaders(sys.executable, source, sh, xlate, env, logs, g,
+                              pkg_key=b.package_key(sh / 'pkg'))
     # Preserve completed Apple shader libraries and rewritten modules before
     # entering packaging, so a packaging-only repair can reuse this expensive
     # work. This archive is included only in the age-encrypted result.
-    with zipfile.ZipFile(report/'host-inputs.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=1) as cache:
-        for label,directory in (('Patched',patched),('IOS',ios)):
-            for path in sorted(directory.rglob('*')):
-                assert not path.is_symlink()
-                if path.is_file() and path.suffix!='.metal':
-                    cache.write(path,label+'/'+path.relative_to(directory).as_posix())
-        for name in ('c1_full.tsv','cb_extent.tsv'):
-            assert g.table(name).is_file()
-            cache.write(g.table(name),'Profile/'+name)
-        cache.writestr('provenance.json',json.dumps(manifest['provenance']))
+    if cache is None:
+        with zipfile.ZipFile(report/'host-inputs.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=1) as saved:
+            for label,directory in (('Patched',patched),('IOS',ios)):
+                for path in sorted(directory.rglob('*')):
+                    assert not path.is_symlink()
+                    if path.is_file() and path.suffix!='.metal':
+                        saved.write(path,label+'/'+path.relative_to(directory).as_posix())
+            for name in ('c1_full.tsv','cb_extent.tsv'):
+                assert g.table(name).is_file()
+                saved.write(g.table(name),'Profile/'+name)
+            saved.writestr('provenance.json',json.dumps(manifest['provenance']))
     output = report / 'Bananza-intermediate.ipa'
     env.update(GAME=TITLE, W=str(work / 'ipa'), PATCHED=str(patched), ROMFS=str(inputs / 'RomFS'),
                MSL_IOS=str(ios), GFXAPI='nvn', FONT_PY=sys.executable, DM_LANG='zh-Hans',
@@ -155,7 +181,7 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env):
     if (inputs / 'icon.jpg').exists(): env['DM_ICON'] = str(inputs / 'icon.jpg')
     b.run(['bash', source / 'dm/ios/tools/build_ipa.sh', output], logs / 'build_ipa.log', env=env)
     with zipfile.ZipFile(output, 'a') as z:
-        z.writestr('Payload/DmIOS.app/dm/build-provenance.json', json.dumps(manifest['provenance']))
+        z.writestr('Payload/DmIOS.app/dm/build-provenance.json', json.dumps(build_provenance))
     with zipfile.ZipFile(output) as z: assert z.testzip() is None
     (report / 'ipa-sha256.txt').write_text(sha(output) + '\n')
 
@@ -175,7 +201,7 @@ def main():
     def progress():
         started=time.monotonic()
         while not stop.wait(60):
-            libraries=sum(1 for _ in (root/'work/shader/ios').glob('b-*/*_b.metallib'))
+            libraries=sum(1 for folder in (root/'work/shader/ios',root/'cache/IOS') for _ in folder.glob('b-*/*_b.metallib'))
             print('Build progress: %d iOS base libraries; %d minutes elapsed.' %
                   (libraries,(time.monotonic()-started)//60),file=public_output,flush=True)
     threading.Thread(target=progress,daemon=True).start()
@@ -187,9 +213,14 @@ def main():
             tickets = ''
             unpack(incoming / 'engine-source.zip', root / 'engine', 2 * 1024**3)
             unpack(incoming / 'compile-input.zip', root / 'input', 4 * 1024**3, manifest['input_files'])
+            cache=None
+            if manifest.get('host_cache'):
+                unpack(incoming/'host-inputs.zip',root/'cache',8*1024**3)
+                cache=root/'cache'
+                print('Reusing all 23,638 iOS shader libraries; compiling the host and IPA only.',flush=True)
             print('Compiling Bananza with the pinned NX2Apple engine; detailed logs stay encrypted.', flush=True)
             sys.stdout = sys.stderr = log
-            compile_game(root / 'engine', root / 'input', root / 'work', report, manifest, log, env)
+            compile_game(root / 'engine', root / 'input', root / 'work', report, manifest, log, env,cache)
             status = 0
         except Exception:
             traceback.print_exc(file=log)
@@ -197,6 +228,8 @@ def main():
     stop.set()
     (report / 'status.txt').write_text('success\n' if status == 0 else 'failed\n')
     if (root / 'work/logs').exists(): shutil.copytree(root / 'work/logs', report / 'compiler-logs')
+    xcode_log=root/'work/ipa/build/ios/pkg/build.log'
+    if xcode_log.exists():shutil.copyfile(xcode_log,report/'xcode-build.log')
     archive = root / 'result.tar'
     with tarfile.open(archive, 'x') as t:
         for p in sorted(report.rglob('*')):
