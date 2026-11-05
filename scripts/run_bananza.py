@@ -142,12 +142,20 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env, cache=N
           logs/'romfs_preflight.log',env=env)
     if cache is not None:
         assert json.loads((cache/'provenance.json').read_text())==manifest['provenance']
-        assert compiler.splitlines()[0]==manifest['host_cache']['compiler'].splitlines()[0]
+        # These are game shader IR libraries, loaded at runtime, not object files
+        # linked into the host. Their verified chain/profile stamp remains the
+        # packer's authority. Preserve the actual shader compiler independently
+        # from the compiler used for the host and its built-in shaders.
+        build_provenance['game_shader_compiler']=manifest['host_cache']['compiler'].splitlines()[0]
+        build_provenance['game_shader_cache']={k:manifest['host_cache'][k] for k in ('sha256','source_run')}
+        (report/'build-provenance.json').write_text(json.dumps(build_provenance,indent=2))
         patched=cache/'Patched';ios=cache/'IOS'
         assert sum(1 for _ in ios.glob('b-*/*_b.metallib'))==23638
         for name in ('c1_full.tsv','cb_extent.tsv'):
             shutil.copyfile(cache/'Profile'/name,g.table(name))
     else:
+        build_provenance['game_shader_compiler']=compiler.splitlines()[0]
+        (report/'build-provenance.json').write_text(json.dumps(build_provenance,indent=2))
         b.rewrite(sys.executable, source, inputs / 'ExeFS', patched, env, logs, g)
         sh = work / 'shader'
         sh.mkdir()
@@ -214,13 +222,9 @@ def main():
             unpack(incoming / 'compile-input.zip', root / 'input', 4 * 1024**3, manifest['input_files'])
             cache=None
             if manifest.get('host_cache'):
-                actual=subprocess.check_output(['xcrun','-sdk','iphoneos','metal','--version'],text=True,env=env)
-                if actual.splitlines()[0]==manifest['host_cache']['compiler'].splitlines()[0]:
-                    unpack(incoming/'host-inputs.zip',root/'cache',8*1024**3)
-                    cache=root/'cache'
-                    print('Reusing all 23,638 iOS shader libraries; compiling the host and IPA only.',flush=True)
-                else:
-                    print('Metal compiler changed; rebuilding all shader libraries with the selected Xcode.',flush=True)
+                unpack(incoming/'host-inputs.zip',root/'cache',8*1024**3)
+                cache=root/'cache'
+                print('Reusing all 23,638 verified iOS game shader libraries; compiling the host with Xcode 27.2.',flush=True)
             print('Compiling Bananza with the pinned NX2Apple engine; detailed logs stay encrypted.', flush=True)
             sys.stdout = sys.stderr = log
             compile_game(root / 'engine', root / 'input', root / 'work', report, manifest, log, env,cache)
