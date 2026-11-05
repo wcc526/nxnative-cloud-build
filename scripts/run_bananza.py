@@ -18,7 +18,7 @@ import zipfile
 
 PRIVATE = 'wcc526/nxnative-private-build'
 TAG = 'bananza-320-20261105'
-MANIFEST_SHA = '757a0aeffb3eac9b64884e92aa83ca872fc918579527c778c58f71fc0e3c00c6'
+MANIFEST_SHA = 'ea795d7baaf68e339361eb7ed4596ae0b43742fb9c07b9b83809b36dd4ed6aa0'
 RECIPIENT = 'age102hu7yuyrkk7f2v28jy3lme9ekj25vwq25p0mhgeesmn75z4kqkqk4udqk'
 TITLE = '040074A01BF12000'
 
@@ -113,7 +113,7 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env):
     metadata = json.loads((inputs / 'metadata.json').read_text())
     assert metadata['version'] == '3.2.0'
     (work / 'tmp').mkdir(parents=True)
-    (inputs / 'RomFS').mkdir()
+    (inputs / 'RomFS').mkdir(exist_ok=True)
     env = dict(clean_env, DM_GAME=TITLE, DM_ROOT=str(work), WORK=str(work / 'tmp'),
                J=str(min(os.cpu_count() or 3, 6)), PYTHONUTF8='1', DM_ALLOW_OTHER_METAL='1')
     compiler = subprocess.check_output(['xcrun', '-sdk', 'iphoneos', 'metal', '--version'], text=True, env=env)
@@ -122,6 +122,8 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env):
     b.check_prereqs(env, xlate)
     b.check_metal(sys.executable, source, env)
     patched, logs = work / 'patched', work / 'logs'
+    b.run([sys.executable,source/'dm/tools/romfs.py',inputs/'RomFS',g.get('romfs_marker')],
+          logs/'romfs_preflight.log',env=env)
     b.rewrite(sys.executable, source, inputs / 'ExeFS', patched, env, logs, g)
     sh = work / 'shader'
     sh.mkdir()
@@ -131,6 +133,19 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env):
     assert {p.name for p in (sh / 'pkg').iterdir()} == wanted
     ios = b.build_shaders(sys.executable, source, sh, xlate, env, logs, g,
                           pkg_key=b.package_key(sh / 'pkg'))
+    # Preserve completed Apple shader libraries and rewritten modules before
+    # entering packaging, so a packaging-only repair can reuse this expensive
+    # work. This archive is included only in the age-encrypted result.
+    with zipfile.ZipFile(report/'host-inputs.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=1) as cache:
+        for label,directory in (('Patched',patched),('IOS',ios)):
+            for path in sorted(directory.rglob('*')):
+                assert not path.is_symlink()
+                if path.is_file() and path.suffix!='.metal':
+                    cache.write(path,label+'/'+path.relative_to(directory).as_posix())
+        for name in ('c1_full.tsv','cb_extent.tsv'):
+            assert g.table(name).is_file()
+            cache.write(g.table(name),'Profile/'+name)
+        cache.writestr('provenance.json',json.dumps(manifest['provenance']))
     output = report / 'Bananza-intermediate.ipa'
     env.update(GAME=TITLE, W=str(work / 'ipa'), PATCHED=str(patched), ROMFS=str(inputs / 'RomFS'),
                MSL_IOS=str(ios), GFXAPI='nvn', FONT_PY=sys.executable, DM_LANG='zh-Hans',
