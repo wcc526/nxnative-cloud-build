@@ -18,7 +18,7 @@ import zipfile
 
 PRIVATE = 'wcc526/nxnative-private-build'
 TAG = 'splatoon-raiders-110-20261105'
-MANIFEST_SHA = 'a4481f7db10e15c604bf631feb9e9d8705ec5d284179d4c7915722a6cb69f5d5'
+MANIFEST_SHA = 'db7e85deb85f04804fdbe902e14ae120868ecc23298d1a56f7271a1fa2591ee2'
 RECIPIENT = 'age19pfyltntrja0tueqdq7afxwwgp9n0g6gspdxhdwmye2282vzyqjskxegqj'
 TITLE = '0400380020056000'
 
@@ -109,7 +109,7 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env, cache=N
     # The xcode-27 runner supplies the SDK used by the pinned engine. Build the
     # original source and keep the project's Metal compiler checks enabled.
     build_provenance=dict(manifest['provenance'],host_sdk_compatibility={
-        'description':'Original engine source compiled with native Xcode 27.2 SDK declarations; no SDK-26 patch'})
+        'description':'Compiled with native Xcode 27.2 SDK declarations'})
     b.ALLOW_OTHER_METAL = False
     profile=source/'dm/games'/TITLE
     rows=lambda p:[s for s in p.read_text().splitlines() if s.strip() and not s.startswith('#')]
@@ -149,6 +149,16 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env, cache=N
     patched, logs = work / 'patched', work / 'logs'
     b.run([sys.executable,source/'dm/tools/romfs.py',inputs/'RomFS',g.get('romfs_marker')],
           logs/'romfs_preflight.log',env=env)
+    if 'memory_fix' in manifest:
+        test_log = logs / 'guest_memory_tests.log'
+        b.run(['make', '-C', source / 'dm/host/tests', 'memory', 'memory-file'],
+              test_log, env=env)
+        test_output = test_log.read_text()
+        assert 'host page=16384, guest files 6)' in test_output
+        assert 'guest files 1)' in test_output and 'guest files 0)' in test_output
+        build_provenance['memory_fix'] = {
+            **manifest['memory_fix'], 'memory_svc_tests_passed': True,
+        }
     if cache is not None:
         assert json.loads((cache/'provenance.json').read_text())==manifest['provenance']
         # These are game shader IR libraries, loaded at runtime, not object files
@@ -218,8 +228,13 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env, cache=N
             saved.writestr('provenance.json',json.dumps(manifest['provenance']))
     output = report / 'SplatoonRaiders-intermediate.ipa'
     diagnostics=work/'ios-diagnostics.env'
-    diagnostics.write_text('DM_OPMODE=0\nDM_ALIAS_WINDOWS=256\n')
-    build_provenance['runtime_defaults']={'DM_OPMODE':'0','DM_ALIAS_WINDOWS':'256'}
+    runtime_defaults = {'DM_OPMODE':'0', 'DM_ALIAS_WINDOWS':'256'}
+    if 'memory_fix' in manifest:
+        alias = manifest['memory_fix']['alias_override']
+        assert alias == '0x130000000'
+        runtime_defaults['DM_ALIAS_SIZE'] = alias
+    diagnostics.write_text(''.join(f'{key}={value}\n' for key, value in runtime_defaults.items()))
+    build_provenance['runtime_defaults'] = runtime_defaults
     (report/'build-provenance.json').write_text(json.dumps(build_provenance,indent=2))
     env.update(GAME=TITLE, W=str(work / 'ipa'), PATCHED=str(patched), ROMFS=str(inputs / 'RomFS'),
                MSL_IOS=str(ios), GFXAPI='nvn', FONT_PY=sys.executable, DM_LANG='zh-Hans',
@@ -260,6 +275,19 @@ def main():
             manifest = fetch(tickets, incoming)
             tickets = ''
             unpack(incoming / 'engine-source.zip', root / 'engine', 2 * 1024**3)
+            if 'memory_fix' in manifest:
+                fix = manifest['memory_fix']
+                engine = root / 'engine'
+                patch = incoming / 'splatoon-memory-backport.patch'
+                assert fix['upstream_commit'] == '865cc35fad7034d17c2190f8ce349f61f5bcaba1'
+                assert set(fix['patched_files']) == {
+                    'dm/host/hle_svc.c', 'dm/host/tests/Makefile',
+                    'dm/host/tests/t_svc_memory.c', 'dm/ios/Sources/main.m',
+                }
+                command = ['git', 'apply', '--whitespace=error']
+                subprocess.run([*command, '--check', patch], cwd=engine, check=True, env=env)
+                subprocess.run([*command, patch], cwd=engine, check=True, env=env)
+                assert all(sha(engine / path) == digest for path, digest in fix['patched_files'].items())
             unpack(incoming / 'compile-input.zip', root / 'input', 4 * 1024**3, manifest['input_files'])
             cache=None
             if manifest.get('host_cache'):
