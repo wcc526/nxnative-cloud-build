@@ -18,7 +18,7 @@ import zipfile
 
 PRIVATE = 'wcc526/nxnative-private-build'
 TAG = 'bananza-320-20261105'
-MANIFEST_SHA = '669f7b094bb11e65cd7f6be63e9a2de35ed105757623884a43eaeaa484cc0ef7'
+MANIFEST_SHA = '2678ac0978a884730ffb397c5e9f5c6c9554ca92699334ebc62247ea920edb0b'
 RECIPIENT = 'age102hu7yuyrkk7f2v28jy3lme9ekj25vwq25p0mhgeesmn75z4kqkqk4udqk'
 TITLE = '040074A01BF12000'
 
@@ -109,7 +109,7 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env, cache=N
     # The xcode-27 runner supplies the SDK used by the pinned engine. Build the
     # original source and keep the project's Metal compiler checks enabled.
     build_provenance=dict(manifest['provenance'],host_sdk_compatibility={
-        'description':'Original engine source compiled with native Xcode 27.2 SDK declarations; no SDK-26 patch'})
+        'description':'Compiled with native Xcode 27.2 SDK declarations'})
     b.ALLOW_OTHER_METAL = False
     profile=source/'dm/games'/TITLE
     rows=lambda p:[s for s in p.read_text().splitlines() if s.strip() and not s.startswith('#')]
@@ -140,6 +140,16 @@ def compile_game(source, inputs, work, report, manifest, log, clean_env, cache=N
     patched, logs = work / 'patched', work / 'logs'
     b.run([sys.executable,source/'dm/tools/romfs.py',inputs/'RomFS',g.get('romfs_marker')],
           logs/'romfs_preflight.log',env=env)
+    if 'memory_fix' in manifest:
+        test_log = logs / 'guest_memory_tests.log'
+        b.run(['make', '-C', source / 'dm/host/tests', 'memory', 'memory-file'],
+              test_log, env=env)
+        test_output = test_log.read_text()
+        assert 'host page=16384, guest files 6)' in test_output
+        assert 'guest files 1)' in test_output and 'guest files 0)' in test_output
+        build_provenance['memory_fix'] = {
+            **manifest['memory_fix'], 'memory_svc_tests_passed': True,
+        }
     if cache is not None:
         assert json.loads((cache/'provenance.json').read_text())==manifest['provenance']
         # These are game shader IR libraries, loaded at runtime, not object files
@@ -219,6 +229,19 @@ def main():
             manifest = fetch(tickets, incoming)
             tickets = ''
             unpack(incoming / 'engine-source.zip', root / 'engine', 2 * 1024**3)
+            if 'memory_fix' in manifest:
+                fix = manifest['memory_fix']
+                engine = root / 'engine'
+                patch = incoming / 'bananza-memory-backport.patch'
+                assert fix['upstream_commit'] == '865cc35fad7034d17c2190f8ce349f61f5bcaba1'
+                assert set(fix['patched_files']) == {
+                    'dm/host/hle_svc.c', 'dm/host/tests/Makefile',
+                    'dm/host/tests/t_svc_memory.c', 'dm/ios/Sources/main.m',
+                }
+                command = ['git', 'apply', '--whitespace=error']
+                subprocess.run([*command, '--check', patch], cwd=engine, check=True, env=env)
+                subprocess.run([*command, patch], cwd=engine, check=True, env=env)
+                assert all(sha(engine / path) == digest for path, digest in fix['patched_files'].items())
             unpack(incoming / 'compile-input.zip', root / 'input', 4 * 1024**3, manifest['input_files'])
             cache=None
             if manifest.get('host_cache'):
